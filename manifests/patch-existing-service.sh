@@ -41,7 +41,8 @@ case "${1:-}" in
       exit 1
     fi
     echo "Restoring original selector on Service/$SVC: $PRIOR"
-    oc -n "$NS" patch svc "$SVC" --type=merge -p "{\"spec\":{\"selector\":$PRIOR}}"
+    oc -n "$NS" patch svc "$SVC" --type=json \
+      -p "[{\"op\":\"replace\",\"path\":\"/spec/selector\",\"value\":$PRIOR}]"
     oc -n "$NS" annotate svc "$SVC" cma-demo.redhat.com/original-selector- --overwrite
     exit 0
     ;;
@@ -55,9 +56,12 @@ oc -n "$NS" annotate svc "$SVC" \
   "cma-demo.redhat.com/original-selector=${CURRENT}" --overwrite >/dev/null
 
 NEW_SELECTOR='{"app.kubernetes.io/name":"mc-ragnarok-waker"}'
-echo "Patching selector -> $NEW_SELECTOR"
-oc -n "$NS" patch svc "$SVC" --type=merge \
-  -p "{\"spec\":{\"selector\":$NEW_SELECTOR}}"
+echo "Replacing selector -> $NEW_SELECTOR"
+# Use --type=json with a `replace` op so the new selector fully REPLACES the
+# old one. A merge patch would preserve old keys (e.g. `app: mc-ragnarok`)
+# and Service selectors are AND-ed, leaving you with empty endpoints.
+oc -n "$NS" patch svc "$SVC" --type=json \
+  -p "[{\"op\":\"replace\",\"path\":\"/spec/selector\",\"value\":$NEW_SELECTOR}]"
 
 echo
 echo "Done. External traffic to Service/$SVC now lands on the waker pod."

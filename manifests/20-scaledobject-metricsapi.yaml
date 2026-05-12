@@ -18,7 +18,8 @@ spec:
   minReplicaCount: 0
   maxReplicaCount: 1
   pollingInterval: 15           # seconds between trigger evaluations
-  cooldownPeriod: 600           # seconds at value=0 before scaling to minReplicaCount
+  cooldownPeriod: 60            # seconds at value=0 before scaling to minReplicaCount
+                                # (60s = workshop-friendly; bump to 600+ for production)
   fallback:
     failureThreshold: 3
     replicas: 1                 # if the waker is unreachable, fail OPEN (server stays up)
@@ -32,8 +33,12 @@ spec:
   triggers:
     - type: metrics-api
       metadata:
+        # HPA formula: desiredReplicas = ceil(metric / targetValue).
+        # The waker's metric is 0 or 1, so targetValue=1 -> 1 replica when hot.
         targetValue: "1"
         url: "http://mc-ragnarok-waker.minecraft.svc.cluster.local:8080/scaler"
         valueLocation: "value"
-        # Force activation as soon as value >= 1 (no averaging window).
-        activationTargetValue: "1"
+        # ACTIVATION gate (scale-to-zero). The SO is "inactive" (replicas=0)
+        # while metric <= activationTargetValue. With a 0/1 metric this MUST
+        # be 0 — otherwise the deployment can never come back from zero.
+        activationTargetValue: "0"

@@ -29,7 +29,12 @@ push:
 
 # In-cluster build using OpenShift BuildConfig + ImageStream — handy if your
 # laptop can't reach an external registry but can reach the cluster.
+#
+# OpenShift's docker build strategy expects a file literally named
+# "Dockerfile". The repo ships a Containerfile (Podman convention); we
+# symlink it as Dockerfile before sending the build context.
 ocp-build:
+	@test -e Dockerfile || ln -sf Containerfile Dockerfile
 	oc -n $(NAMESPACE) new-build --binary --strategy=docker --name=mc-waker \
 	    || true
 	oc -n $(NAMESPACE) start-build mc-waker --from-dir=. --follow

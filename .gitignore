@@ -1,0 +1,20 @@
+# Build artifacts
+/waker/mc-waker
+/waker/Dockerfile   # generated as a symlink to Containerfile by `make ocp-build`
+
+# Go
+*.test
+*.out
+coverage.txt
+
+# Editor / OS junk
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# Local secrets / overrides
+*.local.yaml
+*.local.env
