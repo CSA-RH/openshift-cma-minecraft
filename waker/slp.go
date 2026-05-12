@@ -166,11 +166,18 @@ func probeUpstream(addr string, timeout time.Duration) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	var s statusJSON
-	if err := json.Unmarshal([]byte(js), &s); err != nil {
-		return 0, err
+	// Use a minimal struct: real servers return `description` in many
+	// shapes (string, {text}, full chat component, array). We only care
+	// about the player count, so parse just that and ignore the rest.
+	var minimal struct {
+		Players struct {
+			Online int `json:"online"`
+		} `json:"players"`
 	}
-	return s.Players.Online, nil
+	if err := json.Unmarshal([]byte(js), &minimal); err != nil {
+		return 0, fmt.Errorf("parse status JSON: %w (raw=%.200s)", err, js)
+	}
+	return minimal.Players.Online, nil
 }
 
 // --- Wire format helpers (VarInt, String, Packet) ---------------------------
