@@ -1,0 +1,25 @@
+---
+# Internal ClusterIP Service that the waker uses to reach the actual
+# mc-ragnarok pod. Pure addition — does not interfere with the existing
+# NodePort Service "mc-ragnarok" (which keeps its name and external
+# port number; only its selector changes, see patch-existing-service.sh).
+#
+# The selector below matches whatever label the existing mc-ragnarok pod
+# already carries — confirm with:
+#   oc -n minecraft get pod -l app=mc-ragnarok
+apiVersion: v1
+kind: Service
+metadata:
+  name: mc-ragnarok-backend
+  labels:
+    app.kubernetes.io/part-of: mc-ragnarok
+    app.kubernetes.io/component: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: mc-ragnarok
+  ports:
+    - name: minecraft
+      port: 25565
+      targetPort: 25565
+      protocol: TCP

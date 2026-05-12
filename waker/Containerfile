@@ -1,0 +1,37 @@
+# syntax=docker/dockerfile:1.7
+#
+# Two-stage build using Red Hat UBI images so the result is a small,
+# OpenShift-friendly container that runs as an arbitrary non-root UID.
+#
+# Build:    podman build -t mc-waker:latest -f Containerfile .
+# Smoke:    podman run --rm -p 25565:25565 -p 8080:8080 mc-waker:latest
+
+FROM registry.access.redhat.com/ubi9/go-toolset:1.22 AS build
+USER 0
+WORKDIR /src
+
+# Copy everything in one shot. `go mod tidy` resolves and pins modules whether
+# or not go.sum is committed, so a fresh clone builds cleanly.
+COPY . .
+
+RUN go mod tidy && \
+    CGO_ENABLED=0 GOOS=linux GOFLAGS="-trimpath" \
+    go build -ldflags="-s -w" -o /tmp/mc-waker .
+
+# Runtime image: ubi9-micro is ~30 MB, has CA certs, runs happily under
+# OpenShift's restricted-v2 SCC.
+FROM registry.access.redhat.com/ubi9/ubi-micro:latest
+
+LABEL org.opencontainers.image.title="mc-waker" \
+      org.opencontainers.image.description="Scale-from-zero waker for a Minecraft server pod, driven by KEDA / OpenShift Custom Metrics Autoscaler." \
+      org.opencontainers.image.source="https://github.com/redhat-workshop/openshift-cma-minecraft" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+COPY --from=build /tmp/mc-waker /usr/local/bin/mc-waker
+
+# Document the ports. OpenShift will pick a random UID at runtime; the binary
+# is statically built and reads no files outside the kernel's TCP stack.
+EXPOSE 25565 8080
+USER 1001
+
+ENTRYPOINT ["/usr/local/bin/mc-waker"]

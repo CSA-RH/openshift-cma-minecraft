@@ -1,0 +1,39 @@
+---
+# Variant A: KEDA "metrics-api" trigger.
+#
+# This is the simpler path: KEDA scrapes the waker's /scaler endpoint
+# directly (no Prometheus dependency, no bearer token). Recommended for
+# workshops and demos.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: mc-ragnarok
+  labels:
+    app.kubernetes.io/part-of: mc-ragnarok
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mc-ragnarok           # the existing minecraft Deployment
+  minReplicaCount: 0
+  maxReplicaCount: 1
+  pollingInterval: 15           # seconds between trigger evaluations
+  cooldownPeriod: 600           # seconds at value=0 before scaling to minReplicaCount
+  fallback:
+    failureThreshold: 3
+    replicas: 1                 # if the waker is unreachable, fail OPEN (server stays up)
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 0
+  triggers:
+    - type: metrics-api
+      metadata:
+        targetValue: "1"
+        url: "http://mc-ragnarok-waker.minecraft.svc.cluster.local:8080/scaler"
+        valueLocation: "value"
+        # Force activation as soon as value >= 1 (no averaging window).
+        activationTargetValue: "1"

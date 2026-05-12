@@ -1,0 +1,98 @@
+---
+# ServiceAccount + Deployment + ClusterIP Service for the always-on waker
+# that fronts mc-ragnarok.
+#
+# Naming convention: every object related to the *waker* for a given world is
+# prefixed with the world's name. Spinning up a second world (e.g. mc-asgard)
+# means duplicating these four objects with a global rename — nothing else.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mc-ragnarok-waker
+  labels:
+    app.kubernetes.io/name: mc-ragnarok-waker
+    app.kubernetes.io/part-of: mc-ragnarok
+    app.kubernetes.io/component: waker
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mc-ragnarok-waker
+  labels:
+    app.kubernetes.io/name: mc-ragnarok-waker
+    app.kubernetes.io/part-of: mc-ragnarok
+    app.kubernetes.io/component: waker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mc-ragnarok-waker
+  template:
+    metadata:
+      labels:
+        # IMPORTANT: this label set is what we point the EXISTING
+        # NodePort Service "mc-ragnarok" at, via patch-existing-service.sh.
+        # Both labels below appear in that selector, so don't rename them
+        # without updating the patch script too.
+        app.kubernetes.io/name: mc-ragnarok-waker
+        app.kubernetes.io/part-of: mc-ragnarok
+        app.kubernetes.io/component: waker
+    spec:
+      serviceAccountName: mc-ragnarok-waker
+      containers:
+        - name: waker
+          # Replace with your registry path. Examples:
+          #   image-registry.openshift-image-registry.svc:5000/minecraft/mc-waker:latest
+          #   quay.io/<you>/mc-waker:v0.1.0
+          image: image-registry.openshift-image-registry.svc:5000/minecraft/mc-waker:latest
+          imagePullPolicy: Always
+          ports:
+            - { name: minecraft, containerPort: 25565, protocol: TCP }
+            - { name: metrics,   containerPort: 8080,  protocol: TCP }
+          env:
+            - { name: WAKER_LISTEN,           value: ":25565" }
+            - { name: WAKER_METRICS_LISTEN,   value: ":8080" }
+            # Internal-only ClusterIP Service for the real Minecraft pod.
+            # Defined in 01-backend-service.yaml.
+            - { name: WAKER_UPSTREAM,         value: "mc-ragnarok-backend.minecraft.svc.cluster.local:25565" }
+            - { name: WAKER_PROBE_INTERVAL,   value: "15s" }
+            - { name: WAKER_DIAL_TIMEOUT,     value: "1500ms" }
+            - { name: WAKER_WAKE_HOLD,        value: "5m" }
+            - { name: WAKER_PROTOCOL_VERSION, value: "769" } # 1.21.4
+            - { name: WAKER_VERSION_NAME,     value: "Sleeping (Ragnarok)" }
+            - { name: WAKER_MAX_PLAYERS,      value: "20" }
+            - { name: WAKER_LOG_LEVEL,        value: "info" }
+          readinessProbe:
+            httpGet: { path: /readyz, port: metrics }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: metrics }
+            periodSeconds: 15
+          resources:
+            requests: { cpu: "10m",  memory: "32Mi" }
+            limits:   { cpu: "200m", memory: "128Mi" }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+# ClusterIP Service for the waker — used by KEDA (metrics-api trigger) and
+# Prometheus (ServiceMonitor) to reach the /scaler and /metrics endpoints.
+# It does NOT expose Minecraft externally; the existing NodePort Service
+# (re-targeted via patch-existing-service.sh) does that.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mc-ragnarok-waker
+  labels:
+    app.kubernetes.io/name: mc-ragnarok-waker
+    app.kubernetes.io/part-of: mc-ragnarok
+    app.kubernetes.io/component: waker
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mc-ragnarok-waker
+  ports:
+    - { name: minecraft, port: 25565, targetPort: minecraft, protocol: TCP }
+    - { name: metrics,   port: 8080,  targetPort: metrics,   protocol: TCP }

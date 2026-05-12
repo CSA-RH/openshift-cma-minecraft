@@ -1,0 +1,64 @@
+---
+# Variant B: KEDA "prometheus" trigger against the OpenShift User Workload
+# Monitoring stack (Thanos Querier).
+#
+# Prerequisites:
+#   1. User Workload Monitoring is enabled cluster-wide.
+#   2. Run ./setup-trigger-auth.sh minecraft to provision the
+#      keda-prometheus-token Secret + RBAC.
+#   3. ServiceMonitor in 10-servicemonitor.yaml is applied.
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-prometheus-uwm
+  labels:
+    app.kubernetes.io/part-of: mc-ragnarok
+spec:
+  secretTargetRef:
+    - parameter: bearerToken
+      name: keda-prometheus-token
+      key: token
+    - parameter: ca
+      name: keda-prometheus-token
+      key: ca.crt
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: mc-ragnarok
+  labels:
+    app.kubernetes.io/part-of: mc-ragnarok
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mc-ragnarok
+  minReplicaCount: 0
+  maxReplicaCount: 1
+  pollingInterval: 15
+  cooldownPeriod: 600
+  fallback:
+    failureThreshold: 3
+    replicas: 1
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 0
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: https://thanos-querier.openshift-monitoring.svc.cluster.local:9091
+        namespace: minecraft
+        metricName: minecraft_desired_replicas
+        threshold: "1"
+        activationThreshold: "1"
+        # The waker already publishes a 0/1 gauge; the query stays trivial.
+        # `max` collapses to a scalar in case multiple waker replicas exist.
+        query: |
+          max(minecraft_desired_replicas{namespace="minecraft", service="mc-ragnarok-waker"})
+        authModes: bearer
+      authenticationRef:
+        name: keda-prometheus-uwm

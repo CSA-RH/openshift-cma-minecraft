@@ -1,0 +1,25 @@
+---
+# Tells Prometheus (the OpenShift User Workload Monitoring stack) to scrape
+# the waker's /metrics endpoint. Only required if you choose the Prometheus
+# variant of the ScaledObject (20-scaledobject-prometheus.yaml).
+#
+# Prerequisite: User Workload Monitoring must be enabled cluster-wide:
+#   oc -n openshift-monitoring get cm cluster-monitoring-config
+# If it isn't, follow:
+#   https://docs.openshift.com/container-platform/latest/observability/monitoring/enabling-monitoring-for-user-defined-projects.html
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mc-ragnarok-waker
+  labels:
+    app.kubernetes.io/name: mc-ragnarok-waker
+    app.kubernetes.io/part-of: mc-ragnarok
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mc-ragnarok-waker
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      scheme: http
