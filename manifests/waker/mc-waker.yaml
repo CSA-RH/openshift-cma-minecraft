@@ -54,12 +54,12 @@ spec:
             - { name: WAKER_METRICS_LISTEN,   value: ":8080" }
             # Internal-only ClusterIP Service for the real Minecraft pod.
             # Defined in 01-backend-service.yaml.
-            - { name: WAKER_UPSTREAM,         value: "mc-ragnarok-backend.minecraft.svc.cluster.local:25565" }
+            - { name: WAKER_UPSTREAM,         value: "mc-ragnarok.minecraft.svc.cluster.local:25565" }
             - { name: WAKER_PROBE_INTERVAL,   value: "15s" }
             - { name: WAKER_DIAL_TIMEOUT,     value: "1500ms" }
             - { name: WAKER_WAKE_HOLD,        value: "5m" }
             - { name: WAKER_PROTOCOL_VERSION, value: "769" } # 1.21.4
-            - { name: WAKER_VERSION_NAME,     value: "Sleeping (Ragnarok)" }
+            - { name: WAKER_VERSION_NAME,     value: "Ragnarok is Sleeping" }
             - { name: WAKER_MAX_PLAYERS,      value: "20" }
             - { name: WAKER_LOG_LEVEL,        value: "info" }
           readinessProbe:
