@@ -12,7 +12,7 @@
 set -euo pipefail
 
 NS="${NAMESPACE:-minecraft}"
-SVC="${SERVICE:-mc-ragnarok}"
+SVC="${SERVICE:-mc-ragnarok-nodeport}"
 
 usage() {
   cat <<EOF
@@ -22,7 +22,7 @@ Usage:
 
 Environment overrides:
   NAMESPACE   (default: minecraft)
-  SERVICE     (default: mc-ragnarok)
+  SERVICE     (default: mc-ragnarok-nodeport)
 EOF
 }
 
