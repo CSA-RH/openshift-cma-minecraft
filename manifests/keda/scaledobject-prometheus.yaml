@@ -51,7 +51,7 @@ spec:
     - type: prometheus
       metadata:
         serverAddress: https://thanos-querier.openshift-monitoring.svc.cluster.local:9091
-        namespace: minecraft
+        namespace: ${NAMESPACE}
         metricName: minecraft_desired_replicas
         # HPA divisor: ceil(metric / threshold). Metric is 0/1, so 1 -> 1 replica.
         threshold: "1"
@@ -62,7 +62,7 @@ spec:
         # The waker already publishes a 0/1 gauge; the query stays trivial.
         # `max` collapses to a scalar in case multiple waker replicas exist.
         query: |
-          max(minecraft_desired_replicas{namespace="minecraft", service="mc-ragnarok-waker"})
+          max(minecraft_desired_replicas{namespace="${NAMESPACE}", service="mc-ragnarok-waker"})
         authModes: bearer
       authenticationRef:
         name: keda-prometheus-uwm

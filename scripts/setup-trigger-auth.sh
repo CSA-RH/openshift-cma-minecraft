@@ -32,4 +32,4 @@ oc -n "$NS" create secret generic keda-prometheus-token \
   --dry-run=client -o yaml | oc apply -f -
 
 echo "Secret keda-prometheus-token created/updated in namespace $NS."
-echo "You can now apply 21-scaledobject-prometheus.yaml."
+echo "You can now apply manifests/21-scaledobject-prometheus.yaml."

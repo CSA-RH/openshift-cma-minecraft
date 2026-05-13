@@ -42,7 +42,7 @@ spec:
           # Replace with your registry path. Examples:
           #   image-registry.openshift-image-registry.svc:5000/minecraft/mc-waker:latest
           #   quay.io/<you>/mc-waker:v0.1.0
-          image: image-registry.openshift-image-registry.svc:5000/minecraft/mc-waker:latest
+          image: image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/mc-waker:latest
           imagePullPolicy: Always
           ports:
             - { name: minecraft, containerPort: 25565, protocol: TCP }
@@ -52,10 +52,10 @@ spec:
             - { name: WAKER_METRICS_LISTEN,   value: ":8080" }
             # Internal-only ClusterIP Service for the real Minecraft pod.
             # Defined in manifests/minecraft/mc-ragnarok-svc.yaml.
-            - { name: WAKER_UPSTREAM,         value: "mc-ragnarok.minecraft.svc.cluster.local:25565" }
+            - { name: WAKER_UPSTREAM,         value: "mc-ragnarok.${NAMESPACE}.svc.cluster.local:25565" }
             - { name: WAKER_PROBE_INTERVAL,   value: "15s" }
             - { name: WAKER_DIAL_TIMEOUT,     value: "1500ms" }
-            - { name: WAKER_WAKE_HOLD,        value: "5m" }
+            - { name: WAKER_WAKE_HOLD,        value: "3m" }
             - { name: WAKER_PROTOCOL_VERSION, value: "769" } # 1.21.4
             - { name: WAKER_VERSION_NAME,     value: "Ragnarok is Sleeping" }
             - { name: WAKER_MAX_PLAYERS,      value: "20" }
