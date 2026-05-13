@@ -10,7 +10,8 @@
 #   ./scripts/bootstrap.sh                                  # defaults: NAMESPACE=minecraft, TRIGGER=metrics-api
 #   NAMESPACE=acme TRIGGER=prometheus ./scripts/bootstrap.sh
 #   ./scripts/bootstrap.sh --dry-run                        # render-only, no oc apply
-#   ./scripts/bootstrap.sh --uninstall                      # remove the per-namespace install
+#   ./scripts/bootstrap.sh --uninstall                      # remove the per-namespace install (keeps the namespace)
+#   ./scripts/bootstrap.sh --uninstall --delete-namespace   # also `oc delete project $NAMESPACE`
 #
 # Prerequisites (not enforced by this script):
 #   * oc logged in with rights to create namespaces and cluster-scoped objects
@@ -34,10 +35,12 @@ MANIFESTS="$REPO_ROOT/manifests"
 
 DRY_RUN=0
 UNINSTALL=0
+DELETE_NS=0
 for arg in "$@"; do
   case "$arg" in
     --dry-run)   DRY_RUN=1 ;;
-    --uninstall) UNINSTALL=1 ;;
+    --uninstall)        UNINSTALL=1 ;;
+    --delete-namespace) DELETE_NS=1 ;;
     -h|--help)   sed -n '2,30p' "$0"; exit 0 ;;
     *)           echo "unknown arg: $arg (try --help)"; exit 1 ;;
   esac
@@ -104,7 +107,13 @@ if [[ "$UNINSTALL" -eq 1 ]]; then
   oc delete -n "$NAMESPACE" -f "$MANIFESTS/keda/scaledobject-prometheus.yaml" --ignore-not-found
   oc delete -n "$NAMESPACE" -f "$MANIFESTS/waker/"                            --ignore-not-found
   oc delete -n "$NAMESPACE" -f "$MANIFESTS/minecraft/"                        --ignore-not-found
-  oc delete project "$NAMESPACE"                                              --ignore-not-found
+
+  if [[ "$DELETE_NS" -eq 1 ]]; then
+    note "Deleting project '$NAMESPACE' (because --delete-namespace was passed)"
+    oc delete project "$NAMESPACE" --ignore-not-found
+  else
+    note "Namespace '$NAMESPACE' kept (pass --delete-namespace to remove it too)"
+  fi
   warn "Cluster-scoped KedaController in 'openshift-keda' was left alone — delete it manually if you no longer want CMA on this cluster."
   exit 0
 fi
