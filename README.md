@@ -29,7 +29,7 @@ manifests/
 ├── minecraft/                     Deployment, PVC, Services, Secrets
 └── waker/                         waker Deployment + ServiceMonitor
 scripts/
-├── bootstrap.sh                   (WIP) one-shot installer
+├── bootstrap.sh                   one-shot installer (NAMESPACE/TRIGGER as env vars)
 └── setup-trigger-auth.sh          (Prometheus path only) provisions the bearer-token Secret
 docs/mc-waker-internals.md         walkthrough of the Go program
 ```
@@ -40,41 +40,39 @@ docs/mc-waker-internals.md         walkthrough of the Go program
 - The **Custom Metrics Autoscaler Operator** installed (OperatorHub → "Custom Metrics Autoscaler").
 - For the Prometheus variant: cluster-wide [User Workload Monitoring](https://docs.openshift.com/container-platform/latest/observability/monitoring/enabling-monitoring-for-user-defined-projects.html) enabled.
 
-## Build the waker image
+## Build the waker image (manual / external registry)
+
+`bootstrap.sh` runs `make ocp-build` for you, which pushes into the cluster's internal ImageStream. If you'd rather build locally and push to an external registry (quay.io, etc.):
 
 ```bash
 cd build/mc-waker
 make image IMG=quay.io/<you>/mc-waker:v0.1.0  &&  make push IMG=quay.io/<you>/mc-waker:v0.1.0
-# or, in-cluster build (no external registry needed):
-make ocp-build NAMESPACE=minecraft
 ```
 
-Then update the `image:` field in `manifests/waker/mc-waker.yaml` to match.
+Update the `image:` field in `manifests/waker/mc-waker.yaml` to match, then run `./scripts/bootstrap.sh --skip-build`.
 
 ## Deploy
 
 > Both Secrets in `manifests/minecraft/` ship with `CHANGEME!` placeholder values. Replace at least the Curseforge one if you want modpack downloads.
 
+End-to-end install is one command:
+
 ```bash
-# 0. Cluster-wide (one-time)
-oc apply -f manifests/keda/kedacontroller.yaml
+# Defaults: NAMESPACE=minecraft, TRIGGER=metrics-api
+./scripts/bootstrap.sh
 
-# 1. Namespace + workload
-oc new-project minecraft
-oc apply -f manifests/minecraft/
-oc rollout status deploy/mc-ragnarok
+# Override either:
+NAMESPACE=acme TRIGGER=prometheus ./scripts/bootstrap.sh
 
-# 2. Waker
-oc apply -f manifests/waker/mc-waker.yaml
-oc rollout status deploy/mc-ragnarok-waker
+# Render-only (no oc apply, useful for diff'ing or piping to oc diff):
+./scripts/bootstrap.sh --dry-run
 
-# 3. Pick ONE ScaledObject variant
-oc apply -f manifests/keda/scaledobject-metricsapi.yaml
-# or:
-./scripts/setup-trigger-auth.sh minecraft
-oc apply -f manifests/waker/servicemonitor.yaml
-oc apply -f manifests/keda/scaledobject-prometheus.yaml
+# Already pushed the waker image somewhere (and updated `image:` in
+# manifests/waker/mc-waker.yaml)? Skip the in-cluster build:
+./scripts/bootstrap.sh --skip-build
 ```
+
+The script applies the `KedaController`, creates the namespace, runs `make ocp-build` to push the waker image into the namespace's ImageStream, applies the Minecraft + waker workloads, and applies the chosen `ScaledObject`. Run `./scripts/bootstrap.sh --help` to see every flag.
 
 `mc-ragnarok` will scale to `0` within ~15s of being idle.
 
@@ -98,10 +96,14 @@ CMA-side knobs live on the `ScaledObject` (`pollingInterval`, `cooldownPeriod`, 
 ## Cleanup
 
 ```bash
-oc delete -f manifests/keda/   --ignore-not-found
-oc delete -f manifests/waker/  --ignore-not-found
-oc delete project minecraft
+# Remove the workshop resources, keep the namespace (safe in shared projects):
+./scripts/bootstrap.sh --uninstall
+
+# Or, also delete the namespace itself:
+./scripts/bootstrap.sh --uninstall --delete-namespace
 ```
+
+The cluster-scoped `KedaController` (in `openshift-keda`) is left alone in either case — delete it manually if you no longer want CMA on the cluster.
 
 ## References
 
