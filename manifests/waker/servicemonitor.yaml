@@ -1,7 +1,7 @@
 ---
 # Tells Prometheus (the OpenShift User Workload Monitoring stack) to scrape
 # the waker's /metrics endpoint. Only required if you choose the Prometheus
-# variant of the ScaledObject (20-scaledobject-prometheus.yaml).
+# variant of the ScaledObject (scaledobject-prometheus.yaml).
 #
 # Prerequisite: User Workload Monitoring must be enabled cluster-wide:
 #   oc -n openshift-monitoring get cm cluster-monitoring-config

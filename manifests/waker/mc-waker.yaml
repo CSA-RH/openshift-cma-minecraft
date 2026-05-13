@@ -30,10 +30,8 @@ spec:
   template:
     metadata:
       labels:
-        # IMPORTANT: this label set is what we point the EXISTING
-        # NodePort Service "mc-ragnarok" at, via patch-existing-service.sh.
-        # Both labels below appear in that selector, so don't rename them
-        # without updating the patch script too.
+        # IMPORTANT: this label set is what the NodePort Service
+        # "mc-ragnarok-nodeport" selects to route player traffic to the waker.
         app.kubernetes.io/name: mc-ragnarok-waker
         app.kubernetes.io/part-of: mc-ragnarok
         app.kubernetes.io/component: waker
@@ -53,7 +51,7 @@ spec:
             - { name: WAKER_LISTEN,           value: ":25565" }
             - { name: WAKER_METRICS_LISTEN,   value: ":8080" }
             # Internal-only ClusterIP Service for the real Minecraft pod.
-            # Defined in 01-backend-service.yaml.
+            # Defined in manifests/minecraft/mc-ragnarok-svc.yaml.
             - { name: WAKER_UPSTREAM,         value: "mc-ragnarok.minecraft.svc.cluster.local:25565" }
             - { name: WAKER_PROBE_INTERVAL,   value: "15s" }
             - { name: WAKER_DIAL_TIMEOUT,     value: "1500ms" }
@@ -79,8 +77,8 @@ spec:
 ---
 # ClusterIP Service for the waker — used by KEDA (metrics-api trigger) and
 # Prometheus (ServiceMonitor) to reach the /scaler and /metrics endpoints.
-# It does NOT expose Minecraft externally; the existing NodePort Service
-# (re-targeted via patch-existing-service.sh) does that.
+# It does NOT expose Minecraft externally; the NodePort Service
+# "mc-ragnarok-nodeport" (in manifests/minecraft/) does that.
 apiVersion: v1
 kind: Service
 metadata:

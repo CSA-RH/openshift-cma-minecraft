@@ -4,9 +4,9 @@
 #
 # Prerequisites:
 #   1. User Workload Monitoring is enabled cluster-wide.
-#   2. Run ./setup-trigger-auth.sh minecraft to provision the
+#   2. Run ./scripts/setup-trigger-auth.sh minecraft to provision the
 #      keda-prometheus-token Secret + RBAC.
-#   3. ServiceMonitor in 10-servicemonitor.yaml is applied.
+#   3. ServiceMonitor in manifests/waker/servicemonitor.yaml is applied.
 apiVersion: keda.sh/v1alpha1
 kind: TriggerAuthentication
 metadata:

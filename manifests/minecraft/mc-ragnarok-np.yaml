@@ -1,13 +1,26 @@
+---
+# External entry point for players.
+#
+# IMPORTANT: this Service intentionally selects the WAKER pod, not the
+# Minecraft pod. The waker is always at 1 replica, so there is always
+# something on TCP 25565 to receive a player's connection — even when
+# the Minecraft Deployment has been scaled to zero by KEDA. The waker
+# then either proxies bytes through to the live Minecraft pod or
+# answers the SLP request itself with a "Sleeping" MOTD and triggers
+# the wake-up.
 apiVersion: v1
 kind: Service
 metadata:
   name: mc-ragnarok-nodeport
+  labels:
+    app.kubernetes.io/part-of: mc-ragnarok
+    app.kubernetes.io/component: ingress
 spec:
   type: NodePort
   selector:
-    app: mc-ragnarok
+    app.kubernetes.io/name: mc-ragnarok-waker
   ports:
-    - protocol: TCP
-      name: minecraft
+    - name: minecraft
       port: 25565
       targetPort: 25565
+      protocol: TCP
