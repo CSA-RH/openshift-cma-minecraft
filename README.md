@@ -78,12 +78,16 @@ The script applies the `KedaController`, creates the namespace, runs `make ocp-b
 
 ## Test
 
+`bootstrap.sh` creates a TLS-terminated Route in front of the waker's HTTP API, so no port-forward is needed. Grab the URL once, then hit `/scaler`, `/wake`, or `/status`:
+
 ```bash
-# From inside the cluster — no Minecraft client needed:
-oc -n minecraft port-forward svc/mc-ragnarok-waker 8080:8080 &
-curl -s   localhost:8080/scaler          # {"value":0}
-curl -sX POST localhost:8080/wake        # manual wake
-oc -n minecraft get scaledobject mc-ragnarok   # ACTIVE=True within 15s
+ROUTE="https://$(oc -n minecraft get route mc-ragnarok-waker -o jsonpath='{.spec.host}')"
+
+curl -s   "$ROUTE/scaler"        # {"value":0}  when sleeping, {"value":1} when awake
+curl -sX POST "$ROUTE/wake"      # manual wake — flips the metric to 1
+curl -s   "$ROUTE/status" | jq   # full state JSON (upstream_up, players_online, wake_active, ...)
+
+oc -n minecraft get scaledobject mc-ragnarok   # ACTIVE=True within ~15s of a wake
 oc -n minecraft get deploy mc-ragnarok         # READY=1/1 shortly after
 ```
 
