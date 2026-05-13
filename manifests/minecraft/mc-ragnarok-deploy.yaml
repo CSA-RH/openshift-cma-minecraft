@@ -28,15 +28,13 @@ spec:
         - name: TYPE
           value: VANILLA
         - name: VERSION
-          value: 1.21.10
+          value: 1.21.11
         - name: DIFFICULTY
           value: normal
-        - name: OPS
-          value: Demon86RM
         - name: MODE
           value: survival
         - name: MOTD
-          value: TI DEVI SPAVENTARE!!!!!!!
+          value: Welcome to the CMA Workshop!
         - name: LEVEL_TYPE
           value: DEFAULT
         - name: LEVEL
