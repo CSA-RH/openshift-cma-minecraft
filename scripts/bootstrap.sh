@@ -203,7 +203,11 @@ note "Done. Workshop installed in namespace '$NAMESPACE' with trigger '$TRIGGER'
 if [[ "$DRY_RUN" -eq 0 ]]; then
   echo
   echo "Quick smoke test:"
-  echo "  oc -n $NAMESPACE port-forward svc/mc-ragnarok-waker 8080:8080 &"
-  echo "  curl -s   localhost:8080/scaler"
-  echo "  curl -sX POST localhost:8080/wake"
+  echo '  ROUTE="https://$(oc -n minecraft get route mc-ragnarok-waker -o jsonpath='{.spec.host}')" '
+  echo '  curl -sk $ROUTE/scaler # This will show the current desired replicas value'
+  echo '  curl -skX POST $ROUTE/wake # This will simulate the same api request that KEDA/CMA will do to trigger the autoscaler'
+  echo '  curl -sk $ROUTE/status | jq # All the info that you can pull from the waker pod are here.'
+  
+oc -n minecraft get scaledobject mc-ragnarok   # ACTIVE=True within ~15s of a wake
+oc -n minecraft get deploy mc-ragnarok         # READY=1/1 shortly after
 fi
