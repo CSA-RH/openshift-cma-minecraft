@@ -12,6 +12,7 @@
 #   ./scripts/bootstrap.sh --dry-run                        # render-only, no oc apply
 #   ./scripts/bootstrap.sh --uninstall                      # remove the per-namespace install (keeps the namespace)
 #   ./scripts/bootstrap.sh --uninstall --delete-namespace   # also `oc delete project $NAMESPACE`
+#   ./scripts/bootstrap.sh --skip-build                     # skip the in-cluster `make ocp-build`
 #
 # Prerequisites (not enforced by this script):
 #   * oc logged in with rights to create namespaces and cluster-scoped objects
@@ -36,11 +37,13 @@ MANIFESTS="$REPO_ROOT/manifests"
 DRY_RUN=0
 UNINSTALL=0
 DELETE_NS=0
+SKIP_BUILD=0
 for arg in "$@"; do
   case "$arg" in
     --dry-run)   DRY_RUN=1 ;;
     --uninstall)        UNINSTALL=1 ;;
     --delete-namespace) DELETE_NS=1 ;;
+    --skip-build)       SKIP_BUILD=1 ;;
     -h|--help)   sed -n '2,30p' "$0"; exit 0 ;;
     *)           echo "unknown arg: $arg (try --help)"; exit 1 ;;
   esac
@@ -105,6 +108,7 @@ if [[ "$UNINSTALL" -eq 1 ]]; then
   note "Tearing down namespace '$NAMESPACE'"
   oc delete -n "$NAMESPACE" -f "$MANIFESTS/keda/scaledobject-metricsapi.yaml" --ignore-not-found
   oc delete -n "$NAMESPACE" -f "$MANIFESTS/keda/scaledobject-prometheus.yaml" --ignore-not-found
+  oc delete -n "$NAMESPACE" route mc-ragnarok-waker                           --ignore-not-found
   oc delete -n "$NAMESPACE" -f "$MANIFESTS/waker/"                            --ignore-not-found
   oc delete -n "$NAMESPACE" -f "$MANIFESTS/minecraft/"                        --ignore-not-found
 
@@ -130,7 +134,19 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
   oc get ns "$NAMESPACE" >/dev/null 2>&1 || oc new-project "$NAMESPACE" >/dev/null
 fi
 
-# 2) Minecraft workload (secrets, PVC, deploy, services)
+# 2) Build the waker image into the namespace's ImageStream (in-cluster).
+#    Skip with --skip-build if you've already pushed it (e.g. to quay.io)
+#    and updated `image:` in manifests/waker/mc-waker.yaml accordingly.
+if [[ "$SKIP_BUILD" -eq 1 ]]; then
+  note "Skipping waker image build (--skip-build was passed)"
+elif [[ "$DRY_RUN" -eq 1 ]]; then
+  note "Would build waker image: make -C $REPO_ROOT/build/mc-waker ocp-build NAMESPACE=$NAMESPACE"
+else
+  note "Building waker image into ImageStream '$NAMESPACE/mc-waker' (in-cluster build)"
+  make -C "$REPO_ROOT/build/mc-waker" ocp-build NAMESPACE="$NAMESPACE"
+fi
+
+# 3) Minecraft workload (secrets, PVC, deploy, services)
 note "Applying Minecraft workload"
 apply_namespaced "$MANIFESTS/minecraft"
 
@@ -144,6 +160,24 @@ apply_namespaced "$MANIFESTS/waker/mc-waker.yaml"
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
   oc -n "$NAMESPACE" rollout status deploy/mc-ragnarok-waker --timeout="$WAKER_WAIT_TIMEOUT"
+fi
+
+# 4.5) TLS-terminated Route for the waker's HTTP API (port 8080).
+#      Hostname is derived from the cluster's base domain so curl works
+#      from anywhere without a port-forward.
+note "Creating edge-terminated Route for the waker API"
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "(would create: route/mc-ragnarok-waker -> svc/mc-ragnarok-waker:8080 in $NAMESPACE)"
+else
+  BASE_DOMAIN="$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')"
+  oc -n "$NAMESPACE" create route edge \
+    --service=mc-ragnarok-waker \
+    --port=8080 \
+    --hostname="mc-ragnarok-waker-api.apps.${BASE_DOMAIN}" \
+    --dry-run=client -o yaml \
+    | oc -n "$NAMESPACE" apply -f -
+  ROUTE_HOST="$(oc -n "$NAMESPACE" get route mc-ragnarok-waker -o jsonpath='{.spec.host}')"
+  echo "    Route host: https://${ROUTE_HOST}"
 fi
 
 # 4) Trigger variant
