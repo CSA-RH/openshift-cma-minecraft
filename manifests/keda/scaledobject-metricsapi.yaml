@@ -36,7 +36,7 @@ spec:
         # HPA formula: desiredReplicas = ceil(metric / targetValue).
         # The waker's metric is 0 or 1, so targetValue=1 -> 1 replica when hot.
         targetValue: "1"
-        url: "http://mc-ragnarok-waker.minecraft.svc.cluster.local:8080/scaler"
+        url: "http://mc-ragnarok-waker.${NAMESPACE}.svc.cluster.local:8080/scaler"
         valueLocation: "value"
         # ACTIVATION gate (scale-to-zero). The SO is "inactive" (replicas=0)
         # while metric <= activationTargetValue. With a 0/1 metric this MUST
