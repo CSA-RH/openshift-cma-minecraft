@@ -36,7 +36,8 @@ docs/mc-waker-internals.md         walkthrough of the Go program
 
 ## Prerequisites
 
-- OpenShift 4.12+ with cluster-admin for the initial install.
+- This project has been tested on OpenShift 4.21.14, it should be fine with other version, though your mileage may vary.
+- A user with cluster-admin privileges is needed for the initial install.
 - The **Custom Metrics Autoscaler Operator** installed (OperatorHub → "Custom Metrics Autoscaler").
 - For the Prometheus variant: cluster-wide [User Workload Monitoring](https://docs.openshift.com/container-platform/latest/observability/monitoring/enabling-monitoring-for-user-defined-projects.html) enabled.
 
