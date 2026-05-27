@@ -47,6 +47,11 @@ spec:
           ports:
             - { name: minecraft, containerPort: 25565, protocol: TCP }
             - { name: metrics,   containerPort: 8080,  protocol: TCP }
+            # Bedrock UDP catcher. The port is declared up-front so the
+            # container's listener can bind cleanly; the listener itself is
+            # gated on WAKER_BEDROCK_LISTEN below — leave that empty to
+            # keep the catcher dormant.
+            - { name: bedrock,   containerPort: 19132, protocol: UDP }
           env:
             - { name: WAKER_LISTEN,           value: ":25565" }
             - { name: WAKER_METRICS_LISTEN,   value: ":8080" }
@@ -60,6 +65,26 @@ spec:
             - { name: WAKER_VERSION_NAME,     value: "Ragnarok is Sleeping" }
             - { name: WAKER_MAX_PLAYERS,      value: "20" }
             - { name: WAKER_LOG_LEVEL,        value: "info" }
+
+            # --- Bedrock support (disabled until you flip both switches) ---
+            # The waker will:
+            #   * bind UDP :19132 to catch Unconnected Pings  (WAKER_BEDROCK_LISTEN)
+            #   * probe an upstream Bedrock service           (WAKER_BEDROCK_UPSTREAM)
+            # Both must be set for Bedrock to activate; until then this
+            # deployment behaves exactly like the Java-only version.
+            #
+            # Expected matching topology:
+            #   * mc-ragnarok pod gains a second container running
+            #     itzg/minecraft-bedrock-server on UDP 19132
+            #   * a new ClusterIP Service "mc-ragnarok-bedrock" exposes it
+            #
+            # Then uncomment:
+            # - { name: WAKER_BEDROCK_LISTEN,   value: ":19132" }
+            # - { name: WAKER_BEDROCK_UPSTREAM, value: "mc-ragnarok-bedrock.${NAMESPACE}.svc.cluster.local:19132" }
+            #
+            # mc-monitor is baked into the image at /usr/local/bin/mc-monitor.
+            # Override only if you've put it somewhere else:
+            # - { name: WAKER_MC_MONITOR, value: "/usr/local/bin/mc-monitor" }
           readinessProbe:
             httpGet: { path: /readyz, port: metrics }
             periodSeconds: 5
@@ -94,3 +119,7 @@ spec:
   ports:
     - { name: minecraft, port: 25565, targetPort: minecraft, protocol: TCP }
     - { name: metrics,   port: 8080,  targetPort: metrics,   protocol: TCP }
+    # When you enable Bedrock, also add the UDP port to the NodePort Service
+    # (manifests/minecraft/mc-ragnarok-np.yaml) — that's the one that carries
+    # external player traffic. This ClusterIP exists for internal scrapers.
+    # - { name: bedrock, port: 19132, targetPort: bedrock,   protocol: UDP }

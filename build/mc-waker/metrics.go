@@ -48,18 +48,13 @@ func runHTTP(ctx context.Context, s *state) {
 }
 
 func registerWakerMetrics(reg *prometheus.Registry, s *state) {
-	// Live player count, refreshed by the probe loop. 0 while the upstream
-	// is down (so the scaler falls back to the wake signal alone).
-	players := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+	// Per-protocol player counts. Labelled by protocol so a Bedrock outage
+	// doesn't mask Java players and vice versa.
+	playersJava := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "minecraft_players_online",
-		Help: "Number of players currently online on the upstream Minecraft server (0 if upstream is down).",
-	}, func() float64 {
-		up, p, _ := s.getUpstream()
-		if !up {
-			return 0
-		}
-		return float64(p)
-	})
+		Help: "Number of players currently online on an upstream Minecraft server (0 if upstream is down).",
+	}, []string{"protocol"})
+	reg.MustRegister(playersJava)
 
 	// 1 while a wake-up has been requested and is still being held; 0
 	// otherwise. Provides a brief window during which the ScaledObject can
@@ -74,16 +69,12 @@ func registerWakerMetrics(reg *prometheus.Registry, s *state) {
 		return 0
 	})
 
-	upGauge := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+	// Per-protocol upstream up gauge.
+	upGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "minecraft_upstream_up",
-		Help: "1 if the last SLP probe to the upstream succeeded, 0 otherwise.",
-	}, func() float64 {
-		up, _, _ := s.getUpstream()
-		if up {
-			return 1
-		}
-		return 0
-	})
+		Help: "1 if the last probe to the upstream succeeded, 0 otherwise.",
+	}, []string{"protocol"})
+	reg.MustRegister(upGauge)
 
 	activeConns := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "minecraft_proxy_active_connections",
@@ -106,25 +97,66 @@ func registerWakerMetrics(reg *prometheus.Registry, s *state) {
 		return float64(s.proxyOpens.Load())
 	})
 
+	bedrockPings := prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Name: "minecraft_bedrock_pings_total",
+		Help: "Total number of Bedrock Unconnected Pings received from clients.",
+	}, func() float64 {
+		return float64(s.bedrockPings.Load())
+	})
+
 	// The convenience metric the ScaledObject uses: 1 if the server should
-	// be running (players online OR a wake is pending), else 0. Built into
-	// the waker so the trigger query can stay trivial.
+	// be running (any protocol has players online OR a wake is pending),
+	// else 0. Built into the waker so the trigger query can stay trivial.
 	desired := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "minecraft_desired_replicas",
-		Help: "1 if the server should be running (players online OR wake pending), else 0.",
+		Help: "1 if any upstream should be running (players online OR wake pending), else 0.",
 	}, func() float64 {
 		return float64(desiredReplicas(s))
 	})
 
-	reg.MustRegister(players, wake, upGauge, activeConns, wakeEvents, proxyOpens, desired)
+	reg.MustRegister(wake, activeConns, wakeEvents, proxyOpens, bedrockPings, desired)
+
+	// Re-publish gauges on every scrape by hooking a custom collector.
+	// Simpler: register a single Collect callback via a tiny lambda gauge.
+	// We piggy-back on a NewGaugeFunc that updates the vec just before
+	// Prometheus reads it. (NewGaugeVec doesn't have a "Func" variant.)
+	hook := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "minecraft_metrics_refresh_hook",
+		Help: "Internal: 1; side-effect refreshes per-protocol gauges. Safe to ignore.",
+	}, func() float64 {
+		jUp, jPlayers, _ := s.getUpstream()
+		playersJava.WithLabelValues("java").Set(playerOrZero(jUp, jPlayers))
+		upGauge.WithLabelValues("java").Set(boolToFloat(jUp))
+
+		bUp, bPlayers, _ := s.getBedrockUpstream()
+		playersJava.WithLabelValues("bedrock").Set(playerOrZero(bUp, bPlayers))
+		upGauge.WithLabelValues("bedrock").Set(boolToFloat(bUp))
+		return 1
+	})
+	reg.MustRegister(hook)
+}
+
+func playerOrZero(up bool, n int) float64 {
+	if !up {
+		return 0
+	}
+	return float64(n)
+}
+
+func boolToFloat(b bool) float64 {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // desiredReplicas computes the same value the /scaler endpoint returns and
-// the minecraft_desired_replicas gauge exposes. Centralising it keeps both
-// triggers (Prometheus and metrics-api) perfectly in sync.
+// the minecraft_desired_replicas gauge exposes. Returns 1 if EITHER
+// protocol has players online OR a wake is pending.
 func desiredReplicas(s *state) int {
-	up, p, _ := s.getUpstream()
-	if (up && p > 0) || s.wakeActive() {
+	jUp, jP, _ := s.getUpstream()
+	bUp, bP, _ := s.getBedrockUpstream()
+	if (jUp && jP > 0) || (bUp && bP > 0) || s.wakeActive() {
 		return 1
 	}
 	return 0
@@ -139,11 +171,21 @@ func textOK(msg string) http.HandlerFunc {
 
 func statusHandler(s *state) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
-		up, p, age := s.getUpstream()
+		jUp, jP, jAge := s.getUpstream()
+		bUp, bP, bAge := s.getBedrockUpstream()
 		body := map[string]any{
-			"upstream_up":      up,
-			"players_online":   p,
-			"last_probe_age_s": age.Seconds(),
+			"java": map[string]any{
+				"upstream_up":      jUp,
+				"players_online":   jP,
+				"last_probe_age_s": jAge.Seconds(),
+			},
+			"bedrock": map[string]any{
+				"enabled":          s.cfg.bedrockEnabled(),
+				"upstream_up":      bUp,
+				"players_online":   bP,
+				"last_probe_age_s": bAge.Seconds(),
+				"pings_received":   s.bedrockPings.Load(),
+			},
 			"wake_active":      s.wakeActive(),
 			"active_conns":     s.activeConns.Load(),
 			"desired_replicas": desiredReplicas(s),
