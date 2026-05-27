@@ -26,7 +26,6 @@ set -euo pipefail
 # ---- defaults -----------------------------------------------------------
 : "${NAMESPACE:=minecraft}"
 : "${TRIGGER:=metrics-api}"     # metrics-api | prometheus
-: "${SERVER_TYPE:=java}"	# java | bedrock
 : "${MC_WAIT_TIMEOUT:=180s}"
 : "${WAKER_WAIT_TIMEOUT:=120s}"
 export NAMESPACE
@@ -45,7 +44,6 @@ for arg in "$@"; do
     --uninstall)        UNINSTALL=1 ;;
     --delete-namespace) DELETE_NS=1 ;;
     --skip-build)       SKIP_BUILD=1 ;;
-    --bedrock)		SERVER_TYPE="bedrock" ;;
     -h|--help)   sed -n '2,30p' "$0"; exit 0 ;;
     *)           echo "unknown arg: $arg (try --help)"; exit 1 ;;
   esac
