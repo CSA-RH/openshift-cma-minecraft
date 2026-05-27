@@ -13,8 +13,12 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+.claude/
 *~
 
 # Local secrets / overrides
 *.local.yaml
 *.local.env
+
+# Docs
+docs/keda-vs-knative.md
