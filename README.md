@@ -127,8 +127,6 @@ The cluster-scoped `KedaController` (in `openshift-keda`) is left alone in eithe
 
 - OpenShift docs — [Custom Metrics Autoscaler Operator](https://docs.openshift.com/container-platform/latest/nodes/cma/nodes-cma-autoscaling-custom.html)
 - KEDA docs — [`ScaledObject` concepts](https://keda.sh/docs/latest/concepts/scaling-deployments/), [`metrics-api` trigger](https://keda.sh/docs/latest/scalers/metrics-api/), [`prometheus` trigger](https://keda.sh/docs/latest/scalers/prometheus/)
-<<<<<<< HEAD
 - itzg images — [`minecraft-server`](https://github.com/itzg/docker-minecraft-server), [`minecraft-bedrock-server`](https://github.com/itzg/docker-minecraft-bedrock-server), [`mc-monitor`](https://github.com/itzg/mc-monitor)
 =======
 - itzg images — [`minecraft-server`](https://github.com/itzg/docker-minecraft-server), [`minecraft-bedrock-server`](https://github.com/itzg/docker-minecraft-bedrock-server), [`mc-monitor`](https://github.com/itzg/mc-monitor)
->>>>>>> 9f6a8a2 (Update README.md)
