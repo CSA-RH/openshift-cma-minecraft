@@ -55,9 +55,11 @@ spec:
           env:
             - { name: WAKER_LISTEN,           value: ":25565" }
             - { name: WAKER_METRICS_LISTEN,   value: ":8080" }
+            - { name: WAKER_BEDROCK_LISTEN,   value: ":19132"}
             # Internal-only ClusterIP Service for the real Minecraft pod.
             # Defined in manifests/minecraft/mc-ragnarok-svc.yaml.
             - { name: WAKER_UPSTREAM,         value: "mc-ragnarok.${NAMESPACE}.svc.cluster.local:25565" }
+            - { name: WAKER_BEDROCK_UPSTREAM, value: "mc-ragnarok-bedrock.${NAMESPACE}.svc.cluster.local:19132" }
             - { name: WAKER_PROBE_INTERVAL,   value: "15s" }
             - { name: WAKER_DIAL_TIMEOUT,     value: "1500ms" }
             - { name: WAKER_WAKE_HOLD,        value: "3m" }
@@ -117,7 +119,8 @@ spec:
   selector:
     app.kubernetes.io/name: mc-ragnarok-waker
   ports:
-    - { name: minecraft, port: 25565, targetPort: minecraft, protocol: TCP }
+    - { name: mc-java, port: 25565, targetPort: mc-java, protocol: TCP }
+    - { name: mc-bedrock, port: 19132, targetPort: mc-bedrock, protocol: UDP }
     - { name: metrics,   port: 8080,  targetPort: metrics,   protocol: TCP }
     # When you enable Bedrock, also add the UDP port to the NodePort Service
     # (manifests/minecraft/mc-ragnarok-np.yaml) — that's the one that carries
