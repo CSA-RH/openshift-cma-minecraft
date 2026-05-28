@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -99,15 +98,20 @@ func probeBedrock(s *state) {
 	s.log.Debug("probe(bedrock): upstream up", "players", online)
 }
 
-// mcMonitorStatus invokes `mc-monitor <subcmd> --host H --port P
-// --use-proxy=false --show-player-count` and parses stdout for the online
-// player count. Subcmd is either "status" (Java SLP/TCP) or "status-bedrock"
-// (RakNet/UDP). Returns the online count on success.
+// mcMonitorStatus invokes the itzg `mc-monitor` binary with the correct
+// single-dash flag syntax it actually uses:
 //
-// mc-monitor's JSON output mode shape (when --use-json-output is supported)
-// is preferred; otherwise it prints a one-liner like
-//   "<host>:<port> : online=true ... players=3/20 version=1.21.4"
-// from which we extract the numerator.
+//   mc-monitor status         -host H -port P
+//   mc-monitor status-bedrock -host H -port P
+//
+// Both subcommands print a one-liner to stdout that always contains the
+// player count as `online=N` and the cap as `max=M`. Exit code 0 means
+// "server answered"; non-zero means it didn't. There is no JSON output
+// mode in current builds, so we don't try.
+//
+// Example outputs (observed):
+//   mc-ragnarok:25565         : version=1.21.11 online=0 max=20 motd='Welcome to the CMA Workshop!'
+//   mc-ragnarok-bedrock:19132 : version=1.26.23 online=0 max=5
 func mcMonitorStatus(cfg config, subcmd, addr string) (int, error) {
 	host, port, err := splitHostPort(addr)
 	if err != nil {
@@ -117,78 +121,65 @@ func mcMonitorStatus(cfg config, subcmd, addr string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.McMonitorTimeout)
 	defer cancel()
 
-	// Try JSON output first.
-	jsonArgs := []string{
+	args := []string{
 		subcmd,
-		"--host", host,
-		"--port", fmt.Sprintf("%d", port),
-		"--show-player-count",
-		"--use-json-output",
+		"-host", host,
+		"-port", fmt.Sprintf("%d", port),
 	}
-	out, err := exec.CommandContext(ctx, cfg.McMonitorPath, jsonArgs...).Output()
-	if err == nil {
-		if n, ok := parseMcMonitorJSON(out); ok {
-			return n, nil
-		}
-		// fall through and retry without JSON, in case this build doesn't
-		// support the flag
-	}
-
-	// Plain output.
-	plainArgs := []string{
-		subcmd,
-		"--host", host,
-		"--port", fmt.Sprintf("%d", port),
-		"--show-player-count",
-	}
-	out, err = exec.CommandContext(ctx, cfg.McMonitorPath, plainArgs...).Output()
+	cmd := exec.CommandContext(ctx, cfg.McMonitorPath, args...)
+	// Combine stdout+stderr so a misconfigured invocation surfaces something
+	// useful in the wrapped error rather than a silent empty string.
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return 0, err
+		// A non-zero exit from mc-monitor is a real "server down" signal,
+		// not a tool failure. Wrap the error with the head of its output so
+		// debug logging is actually actionable.
+		return 0, fmt.Errorf("mc-monitor %s exited: %w (output=%s)",
+			subcmd, err, trimForLog(out))
 	}
-	return parseMcMonitorPlain(out), nil
+	n, ok := parseMcMonitorPlain(out)
+	if !ok {
+		return 0, fmt.Errorf("mc-monitor %s: could not parse 'online=' from output: %s",
+			subcmd, trimForLog(out))
+	}
+	return n, nil
 }
 
-// parseMcMonitorJSON extracts players.online from a JSON document.
-// Tolerates either the top-level `{online: 3, ...}` shape or the nested
-// `{players: {online: 3}}` shape mc-monitor has used at different times.
-func parseMcMonitorJSON(b []byte) (int, bool) {
-	var any1 struct {
-		Online  *int `json:"online"`
-		Players struct {
-			Online *int `json:"online"`
-		} `json:"players"`
-	}
-	if err := json.Unmarshal(b, &any1); err != nil {
+// parseMcMonitorPlain extracts the value of the `online=N` token from
+// mc-monitor's one-liner output. Returns (count, true) on success, or
+// (0, false) if the token wasn't found.
+//
+// We deliberately ignore `max=` — the autoscaler only cares about the
+// live count.
+func parseMcMonitorPlain(b []byte) (int, bool) {
+	s := string(b)
+	// Find `online=` as a whole token (preceded by start-of-string, space,
+	// or one of the punctuation chars mc-monitor uses).
+	idx := strings.Index(s, "online=")
+	if idx < 0 {
 		return 0, false
 	}
-	if any1.Players.Online != nil {
-		return *any1.Players.Online, true
-	}
-	if any1.Online != nil {
-		return *any1.Online, true
-	}
-	return 0, false
-}
-
-// parseMcMonitorPlain hunts for "players=N/M" in the one-liner output and
-// returns N. If the substring isn't there, returns 0 — which is safe: a
-// successful probe with zero players is the steady state anyway.
-func parseMcMonitorPlain(b []byte) int {
-	s := string(b)
-	idx := strings.Index(s, "players=")
-	if idx < 0 {
-		return 0
-	}
-	rest := s[idx+len("players="):]
-	slash := strings.IndexAny(rest, "/ \n\t")
-	if slash > 0 {
-		rest = rest[:slash]
+	rest := s[idx+len("online="):]
+	// The value ends at the next whitespace, comma, or end of string.
+	end := strings.IndexAny(rest, " \t\n\r,")
+	if end > 0 {
+		rest = rest[:end]
 	}
 	var n int
 	if _, err := fmt.Sscanf(rest, "%d", &n); err != nil {
-		return 0
+		return 0, false
 	}
-	return n
+	return n, true
+}
+
+// trimForLog shortens mc-monitor output for inclusion in error messages.
+// The full output is rarely more than 200 chars but we cap defensively.
+func trimForLog(b []byte) string {
+	s := strings.TrimSpace(string(b))
+	if len(s) > 300 {
+		s = s[:300] + "..."
+	}
+	return s
 }
 
 // mcMonitorUsable returns true if the binary at path exists and is

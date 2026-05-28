@@ -55,7 +55,10 @@ type state struct {
 
 	// bedrockPings counts UDP Unconnected Pings received from clients.
 	// Useful for sanity-checking that wake traffic is reaching the waker.
-	bedrockPings atomic.Int64
+	bedrockPings           atomic.Int64
+	bedrockSessionsActive  atomic.Int64
+	bedrockForwardedUp     atomic.Int64
+	bedrockForwardedDown   atomic.Int64
 }
 
 func newState(cfg config, log *slog.Logger) *state {

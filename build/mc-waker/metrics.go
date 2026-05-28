@@ -104,6 +104,28 @@ func registerWakerMetrics(reg *prometheus.Registry, s *state) {
 		return float64(s.bedrockPings.Load())
 	})
 
+	bedrockSessions := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "minecraft_bedrock_sessions_active",
+		Help: "Current number of Bedrock UDP client sessions the proxy is tracking.",
+	}, func() float64 {
+		return float64(s.bedrockSessionsActive.Load())
+	})
+
+	bedrockForwardUp := prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Name: "minecraft_bedrock_forwarded_packets_total",
+		Help: "Total Bedrock UDP datagrams proxied (direction=up is client→server, direction=down is server→client).",
+		ConstLabels: prometheus.Labels{"direction": "up"},
+	}, func() float64 {
+		return float64(s.bedrockForwardedUp.Load())
+	})
+	bedrockForwardDown := prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Name: "minecraft_bedrock_forwarded_packets_total",
+		Help: "Total Bedrock UDP datagrams proxied (direction=up is client→server, direction=down is server→client).",
+		ConstLabels: prometheus.Labels{"direction": "down"},
+	}, func() float64 {
+		return float64(s.bedrockForwardedDown.Load())
+	})
+
 	// The convenience metric the ScaledObject uses: 1 if the server should
 	// be running (any protocol has players online OR a wake is pending),
 	// else 0. Built into the waker so the trigger query can stay trivial.
@@ -114,7 +136,7 @@ func registerWakerMetrics(reg *prometheus.Registry, s *state) {
 		return float64(desiredReplicas(s))
 	})
 
-	reg.MustRegister(wake, activeConns, wakeEvents, proxyOpens, bedrockPings, desired)
+	reg.MustRegister(wake, activeConns, wakeEvents, proxyOpens, bedrockPings, bedrockSessions, bedrockForwardUp, bedrockForwardDown, desired)
 
 	// Re-publish gauges on every scrape by hooking a custom collector.
 	// Simpler: register a single Collect callback via a tiny lambda gauge.
