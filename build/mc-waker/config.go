@@ -13,40 +13,71 @@ import (
 // environment variable so the Deployment can configure it without touching the
 // container args.
 type config struct {
-	ListenAddr      string
-	MetricsAddr     string
-	UpstreamAddr    string
-	ProbeInterval   time.Duration
-	DialTimeout     time.Duration
-	WakeHoldFor     time.Duration
+	// --- Listening (inbound from players) ---
+	ListenAddr        string // TCP, Java
+	BedrockListenAddr string // UDP, Bedrock — empty = disabled
+
+	// --- Metrics / admin HTTP ---
+	MetricsAddr string
+
+	// --- Upstreams (outbound to real Minecraft pods) ---
+	UpstreamAddr        string // Java, TCP — required
+	BedrockUpstreamAddr string // Bedrock, UDP — empty = Bedrock disabled
+
+	// --- Probe loop ---
+	ProbeInterval time.Duration
+	DialTimeout   time.Duration
+	WakeHoldFor   time.Duration
+
+	// --- mc-monitor integration ---
+	// Path to the mc-monitor binary copied from the itzg image. If empty
+	// or missing, probes fall back to the hand-rolled SLP requester in
+	// slp.go (Java only — Bedrock probing requires mc-monitor).
+	McMonitorPath    string
+	McMonitorTimeout time.Duration
+
+	// --- Cosmetic / SLP response shape ---
 	SleepingMOTD    string
 	DisconnectMsg   string
 	ProtocolVersion int
 	VersionName     string
 	MaxPlayers      int
-	LogLevel        slog.Level
+
+	LogLevel slog.Level
 }
 
 func parseFlags() config {
 	cfg := config{}
 	flag.StringVar(&cfg.ListenAddr, "listen",
 		envOr("WAKER_LISTEN", ":25565"),
-		"TCP address the proxy listens on for Minecraft clients")
+		"TCP address the proxy listens on for Java Minecraft clients")
+	flag.StringVar(&cfg.BedrockListenAddr, "bedrock-listen",
+		envOr("WAKER_BEDROCK_LISTEN", ""),
+		"UDP address to catch Bedrock client pings on (empty = Bedrock disabled)")
 	flag.StringVar(&cfg.MetricsAddr, "metrics-listen",
 		envOr("WAKER_METRICS_LISTEN", ":8080"),
 		"HTTP address for /metrics, /scaler and admin endpoints")
 	flag.StringVar(&cfg.UpstreamAddr, "upstream",
 		envOr("WAKER_UPSTREAM", "minecraft:25565"),
-		"host:port of the real Minecraft Service")
+		"host:port of the real Java Minecraft Service")
+	flag.StringVar(&cfg.BedrockUpstreamAddr, "bedrock-upstream",
+		envOr("WAKER_BEDROCK_UPSTREAM", ""),
+		"host:port of the real Bedrock Service (empty = Bedrock probing disabled)")
 	flag.DurationVar(&cfg.ProbeInterval, "probe-interval",
 		envDur("WAKER_PROBE_INTERVAL", 15*time.Second),
-		"How often to probe the upstream server with an SLP request")
+		"How often to probe the upstream server")
 	flag.DurationVar(&cfg.DialTimeout, "dial-timeout",
 		envDur("WAKER_DIAL_TIMEOUT", 1500*time.Millisecond),
-		"Timeout when dialing or probing the upstream")
+		"Timeout when dialing or probing an upstream")
 	flag.DurationVar(&cfg.WakeHoldFor, "wake-hold",
 		envDur("WAKER_WAKE_HOLD", 5*time.Minute),
 		"How long minecraft_wake_signal stays at 1 after a wake event")
+	flag.StringVar(&cfg.McMonitorPath, "mc-monitor",
+		envOr("WAKER_MC_MONITOR", "/usr/local/bin/mc-monitor"),
+		"Path to the mc-monitor binary (copied from itzg image at build time)")
+	flag.DurationVar(&cfg.McMonitorTimeout, "mc-monitor-timeout",
+		envDur("WAKER_MC_MONITOR_TIMEOUT", 3*time.Second),
+		"How long to wait for an mc-monitor invocation before giving up")
 	flag.StringVar(&cfg.SleepingMOTD, "sleeping-motd",
 		envOr("WAKER_SLEEPING_MOTD",
 			"§eServer is sleeping...\n§aJust hit Refresh to wake it up!"),
@@ -72,6 +103,13 @@ func parseFlags() config {
 
 	cfg.LogLevel = parseLogLevel(logLevel)
 	return cfg
+}
+
+// bedrockEnabled is true when both a listen address and an upstream are set.
+// Either alone is a misconfiguration we tolerate (we'd refuse to bind without
+// the other), so we treat the pair as the on/off switch.
+func (c config) bedrockEnabled() bool {
+	return c.BedrockListenAddr != "" && c.BedrockUpstreamAddr != ""
 }
 
 func parseLogLevel(s string) slog.Level {

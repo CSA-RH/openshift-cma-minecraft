@@ -1,11 +1,17 @@
 # syntax=docker/dockerfile:1.7
 #
-# Two-stage build using Red Hat UBI images so the result is a small,
-# OpenShift-friendly container that runs as an arbitrary non-root UID.
+# Three-stage build:
+#   1. Compile mc-waker (Go) on a Red Hat UBI go-toolset image.
+#   2. Borrow the mc-monitor binary from itzg/minecraft-server. mc-monitor is
+#      a single static Go binary the itzg images already ship and use for
+#      their liveness/readiness probes. We reuse it so we don't have to
+#      pin/track a separate release artifact.
+#   3. Assemble a tiny UBI-micro runtime image with both binaries.
 #
 # Build:    podman build -t mc-waker:latest -f Containerfile .
 # Smoke:    podman run --rm -p 25565:25565 -p 8080:8080 mc-waker:latest
 
+# ---- Stage 1: build the waker ------------------------------------------------
 FROM registry.access.redhat.com/ubi9/go-toolset:1.22 AS build
 USER 0
 WORKDIR /src
@@ -18,20 +24,38 @@ RUN go mod tidy && \
     CGO_ENABLED=0 GOOS=linux GOFLAGS="-trimpath" \
     go build -ldflags="-s -w" -o /tmp/mc-waker .
 
-# Runtime image: ubi9-micro is ~30 MB, has CA certs, runs happily under
-# OpenShift's restricted-v2 SCC.
+# ---- Stage 2: borrow mc-monitor from the itzg image --------------------------
+# itzg/minecraft-server ships mc-monitor at /usr/local/bin/mc-monitor and uses
+# it for the pod's own liveness probe. We pin to :latest by default; for a
+# reproducible build, swap to a digest, e.g.
+#   FROM docker.io/itzg/minecraft-server@sha256:... AS mc-monitor
+#
+# If the path ever changes upstream, override at build time:
+#   podman build --build-arg MC_MONITOR_SRC=/path/in/image \
+#                -t mc-waker:latest -f Containerfile .
+FROM docker.io/itzg/minecraft-server:latest AS mc-monitor
+# (No commands — we only need the filesystem.)
+
+# ---- Stage 3: assemble the runtime image -------------------------------------
+# ubi9-micro is ~30 MB, has CA certs, runs happily under OpenShift's
+# restricted-v2 SCC.
 FROM registry.access.redhat.com/ubi9/ubi-micro:latest
 
 LABEL org.opencontainers.image.title="mc-waker" \
-      org.opencontainers.image.description="Scale-from-zero waker for a Minecraft server pod, driven by KEDA / OpenShift Custom Metrics Autoscaler." \
+      org.opencontainers.image.description="Scale-from-zero waker for a Minecraft server pod (Java + Bedrock), driven by KEDA / OpenShift Custom Metrics Autoscaler." \
       org.opencontainers.image.source="https://github.com/redhat-workshop/openshift-cma-minecraft" \
       org.opencontainers.image.licenses="Apache-2.0"
 
-COPY --from=build /tmp/mc-waker /usr/local/bin/mc-waker
+ARG MC_MONITOR_SRC=/usr/local/bin/mc-monitor
 
-# Document the ports. OpenShift will pick a random UID at runtime; the binary
-# is statically built and reads no files outside the kernel's TCP stack.
-EXPOSE 25565 8080
+COPY --from=build      /tmp/mc-waker         /usr/local/bin/mc-waker
+COPY --from=mc-monitor ${MC_MONITOR_SRC}     /usr/local/bin/mc-monitor
+
+# Document the ports.
+#   25565/tcp  — Java SLP + login (always on)
+#   19132/udp  — Bedrock Unconnected Ping (only listens if WAKER_BEDROCK_LISTEN is set)
+#    8080/tcp  — HTTP metrics + /scaler + admin
+EXPOSE 25565/tcp 19132/udp 8080/tcp
 USER 1001
 
 ENTRYPOINT ["/usr/local/bin/mc-waker"]

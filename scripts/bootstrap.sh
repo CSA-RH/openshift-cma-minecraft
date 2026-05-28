@@ -105,12 +105,13 @@ note "config: NAMESPACE=$NAMESPACE  TRIGGER=$TRIGGER  DRY_RUN=$DRY_RUN  UNINSTAL
 
 # ---- uninstall path ----------------------------------------------------
 if [[ "$UNINSTALL" -eq 1 ]]; then
-  note "Tearing down namespace '$NAMESPACE'"
+  note "Tearing down resources from '$NAMESPACE'"
   oc delete -n "$NAMESPACE" -f "$MANIFESTS/keda/scaledobject-metricsapi.yaml" --ignore-not-found
   oc delete -n "$NAMESPACE" -f "$MANIFESTS/keda/scaledobject-prometheus.yaml" --ignore-not-found
   oc delete -n "$NAMESPACE" route mc-ragnarok-waker                           --ignore-not-found
   oc delete -n "$NAMESPACE" -f "$MANIFESTS/waker/"                            --ignore-not-found
   oc delete -n "$NAMESPACE" -f "$MANIFESTS/minecraft/"                        --ignore-not-found
+  oc delete -n "$NAMESPACE" all -l build=mc-waker --ignore-not-found # to Delete all the buildConfig related resources (buildConfig,builds and imageStream)
 
   if [[ "$DELETE_NS" -eq 1 ]]; then
     note "Deleting project '$NAMESPACE' (because --delete-namespace was passed)"

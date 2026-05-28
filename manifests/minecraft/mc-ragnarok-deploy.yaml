@@ -25,6 +25,56 @@ spec:
       - env:
         - name: EULA
           value: "TRUE"
+        - name: DIFFICULTY
+          value: normal
+        - name: SERVER_NAME
+          value: Balmung
+        - name: LEVEL_NAME
+          value: balmung
+        - name: LEVEL_SEED
+          value: "" # leave it blank or use it with an existing Seed (you can find that online)
+        - name: LEVEL_TYPE
+          value: DEFAULT
+        - name: OPS
+          value: "" #insert your in-game username here if you want to administer the server from within the game
+        - name: GAMEMODE
+          value: survival
+        - name: MOTD
+          value: "Welcome to the CMA Workshop!"
+        - name: ONLINE_MODE
+          value: "false"
+        - name: ALLOW_CHEATS
+          value: "true"
+        - name: MAX_PLAYERS
+          value: "5"
+        image: docker.io/itzg/minecraft-bedrock-server:latest
+        imagePullPolicy: Always
+        livenessProbe:
+          exec:
+            command:
+            - mc-monitor
+            - status-bedrock
+            - --host
+            - 127.0.0.1
+          failureThreshold: 20
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: mc-bedrock
+        ports:
+        - containerPort: 19132
+          name: mc-bedrock
+          protocol: UDP
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /data
+          name: bedrock-datadir
+      - env:
+        - name: EULA
+          value: "TRUE"
         - name: TYPE
           value: VANILLA
         - name: VERSION
@@ -43,6 +93,10 @@ spec:
           value: none
         - name: MEMORY
           value: 1024M
+        - name: SEED
+          value: "" # leave it blank or use it with an existing Seed (you can find that online)
+        - name: OPS
+          value: "" #insert your in-game username here if you want to administer the server from within the game
         - name: ENABLE_RCON
           value: "false"
         - name: CF_API_KEY
@@ -114,3 +168,6 @@ spec:
           claimName: mc-ragnarok-datadir
       - emptyDir: {}
         name: backupdir
+      - name: bedrock-datadir
+        persistentVolumeClaim:
+          claimName: mc-ragnarok-bedrock-datadir

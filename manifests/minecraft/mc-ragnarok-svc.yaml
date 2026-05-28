@@ -19,7 +19,24 @@ spec:
   selector:
     app: mc-ragnarok
   ports:
-    - name: minecraft
+    - name: mc-java
       port: 25565
       targetPort: 25565
       protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mc-ragnarok-bedrock
+  labels:
+    app.kubernetes.io/part-of: mc-ragnarok
+    app.kubernetes.io/component: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: mc-ragnarok
+  ports:
+    - name: mc-bedrock
+      port: 19132
+      targetPort: 19132
+      protocol: UDP
