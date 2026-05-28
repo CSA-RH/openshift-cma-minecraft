@@ -31,6 +31,8 @@ spec:
           value: Balmung
         - name: LEVEL_NAME
           value: balmung
+        - name: LEVEL_SEED
+          value: "" # leave it blank or use it with an existing Seed (you can find that online)
         - name: LEVEL_TYPE
           value: DEFAULT
         - name: OPS
@@ -69,7 +71,7 @@ spec:
         terminationMessagePolicy: File
         volumeMounts:
         - mountPath: /data
-          name: mc-ragnarok-bedrock-datadir
+          name: bedrock-datadir
       - env:
         - name: EULA
           value: "TRUE"
@@ -91,6 +93,8 @@ spec:
           value: none
         - name: MEMORY
           value: 1024M
+        - name: SEED
+          value: "" # leave it blank or use it with an existing Seed (you can find that online)
         - name: OPS
           value: "" #insert your in-game username here if you want to administer the server from within the game
         - name: ENABLE_RCON
@@ -164,6 +168,6 @@ spec:
           claimName: mc-ragnarok-datadir
       - emptyDir: {}
         name: backupdir
-      - name: mc-ragnarok-bedrock-datadir
+      - name: bedrock-datadir
         persistentVolumeClaim:
           claimName: mc-ragnarok-bedrock-datadir
