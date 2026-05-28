@@ -34,11 +34,11 @@ spec:
         - name: LEVEL_TYPE
           value: DEFAULT
         - name: OPS
-          value: Demon86RM
+          value: "" #insert your in-game username here if you want to administer the server from within the game
         - name: GAMEMODE
           value: survival
         - name: MOTD
-          value: '"Madonna puttana, lo hai fatto per il Nether"'
+          value: "Welcome to the CMA Workshop!"
         - name: ONLINE_MODE
           value: "false"
         - name: ALLOW_CHEATS
@@ -91,6 +91,8 @@ spec:
           value: none
         - name: MEMORY
           value: 1024M
+        - name: OPS
+          value: "" #insert your in-game username here if you want to administer the server from within the game
         - name: ENABLE_RCON
           value: "false"
         - name: CF_API_KEY
