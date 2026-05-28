@@ -89,7 +89,7 @@ curl -sX POST "$ROUTE/wake"      # manual wake — flips the metric to 1
 curl -s   "$ROUTE/status" | jq   # full state JSON (upstream_up, players_online, wake_active, ...)
 
 oc -n minecraft get scaledobject mc-ragnarok   # ACTIVE=True within ~15s of a wake
-oc -n minecraft get deploy mc-ragnarok         # READY=1/1 shortly after
+oc -n minecraft get deploy mc-ragnarok         # READY=2/2 shortly after
 ```
 
 End-to-end: connect a Minecraft client to `<node-ip>:<nodePort>`. First *Refresh* shows "Ragnarok is Sleeping"; refresh again ~30s later for the live server.
